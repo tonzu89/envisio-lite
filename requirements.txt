@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+asyncpg
+pydantic-settings
+sqladmin
+python-multipart
+httpx
+openai
+python-dotenv
+itsdangerous
