@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Помощник</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col">
 
@@ -34,17 +37,21 @@
 
         // Загрузка ассистентов
         async function loadAssistants() {
-            const res = await fetch('/api/assistants');
-            const list = await res.json();
-            const grid = document.getElementById('assistants-grid');
-            
-            list.forEach(ast => {
-                const btn = document.createElement('div');
-                btn.className = 'bg-white p-6 rounded-xl shadow-md text-center cursor-pointer active:scale-95 transition';
-                btn.innerHTML = `<div class="text-4xl mb-2">${ast.icon_emoji}</div><div class="font-bold text-lg">${ast.name}</div><div class="text-gray-500 text-sm">${ast.description}</div>`;
-                btn.onclick = () => openChat(ast);
-                grid.appendChild(btn);
-            });
+            try {
+                const res = await fetch('/api/assistants');
+                const list = await res.json();
+                const grid = document.getElementById('assistants-grid');
+                
+                list.forEach(ast => {
+                    const btn = document.createElement('div');
+                    btn.className = 'bg-white p-6 rounded-xl shadow-md text-center cursor-pointer active:scale-95 transition';
+                    btn.innerHTML = `<div class="text-4xl mb-2">${ast.icon_emoji}</div><div class="font-bold text-lg">${ast.name}</div><div class="text-gray-500 text-sm">${ast.description}</div>`;
+                    btn.onclick = () => openChat(ast);
+                    grid.appendChild(btn);
+                });
+            } catch (e) {
+                console.error("Ошибка загрузки ассистентов", e);
+            }
         }
 
         function openChat(ast) {
@@ -54,7 +61,6 @@
             document.getElementById('chat-screen').classList.add('flex');
             document.getElementById('chat-title').innerText = ast.name;
             document.getElementById('messages').innerHTML = ''; 
-            // Тут можно добавить загрузку истории (GET /api/history)
         }
 
         function goBack() {
@@ -68,17 +74,15 @@
             const text = input.value;
             if (!text) return;
 
-            // Рендер сообщения юзера
             addMessage(text, 'user');
             input.value = '';
 
-            // Запрос на бэк
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tg.initData // ВАЖНО: Шлем данные телеграма
+                        'X-Telegram-Init-Data': tg.initData 
                     },
                     body: JSON.stringify({ assistant_slug: currentAssistant.slug, text: text })
                 });
@@ -97,10 +101,28 @@
 
         function addMessage(text, role) {
             const div = document.createElement('div');
-            div.className = role === 'user' ? 'bg-blue-100 self-end p-3 rounded-lg max-w-[80%] ml-auto' : 'bg-white border self-start p-3 rounded-lg max-w-[90%] text-lg';
-            div.innerText = text;
+            
+            // Базовые стили
+            let bubbleClass = role === 'user' 
+                ? 'bg-blue-100 self-end ml-auto' 
+                : 'bg-white border self-start';
+            
+            // prose (typography) делает текст красивым, а ссылки синими
+            // Но работает только если подключен плагин ?plugins=typography
+            div.className = `${bubbleClass} p-3 rounded-lg max-w-[90%] text-lg prose prose-p:my-1 prose-a:text-blue-600 prose-a:underline break-words leading-snug`;
+
+            // Парсим Markdown в HTML
+            div.innerHTML = marked.parse(text);
+
+            // Заставляем ссылки открываться во внешнем браузере
+            const links = div.querySelectorAll('a');
+            links.forEach(link => {
+                link.target = '_blank';
+            });
+
             document.getElementById('messages').appendChild(div);
-            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            // Прокрутка вниз
+            document.getElementById('messages').scrollTo(0, document.getElementById('messages').scrollHeight);
         }
 
         loadAssistants();

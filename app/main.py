@@ -63,11 +63,12 @@ async def chat(
     request: Request, 
     db: AsyncSession = Depends(get_db)
 ):
+    # Мут валидации для тестов
     # 1. Валидация
-    init_data = request.headers.get("X-Telegram-Init-Data")
+    # init_data = request.headers.get("X-Telegram-Init-Data")
     # Если тестируете локально без Телеграма, закомментируйте строку ниже:
-    user_data = validate_telegram_data(init_data) 
-    # user_data = {"id": 12345, "username": "test_user"} # Раскомментируйте для теста в браузере
+    # user_data = validate_telegram_data(init_data) 
+    user_data = {"id": 12345, "username": "test_user"} # Раскомментируйте для теста в браузере
     
     user_id = user_data["id"]
 
