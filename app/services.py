@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 from app.config import settings
 from sqlalchemy.future import select
-from app.models import Message, Product
+from app.models import Message, Product, Assistant
 
 ai_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -9,6 +9,10 @@ ai_client = AsyncOpenAI(
 )
 
 async def get_products_context(assistant_slug: str, session) -> str:
+    """
+    Формирует инструкцию с партнерскими товарами, 
+    доступными для конкретного ассистента.
+    """
     # 1. Забираем ВСЕ активные товары
     result = await session.execute(select(Product).where(Product.is_active == True))
     all_products = result.scalars().all()
@@ -48,31 +52,44 @@ async def get_products_context(assistant_slug: str, session) -> str:
     )
 
 async def get_ai_response(user_text: str, assistant_slug: str, history: list, session):
-    # 1. Получаем контекст товаров (вместо жесткого поиска)
+    # 1. Получаем контекст товаров (рекламная инструкция)
     ad_system_prompt = await get_products_context(assistant_slug, session)
     
-    # 2. Формируем историю сообщений
+    # 2. Получаем данные ассистента, чтобы узнать его ПРЕСЕТ
+    result = await session.execute(select(Assistant).where(Assistant.slug == assistant_slug))
+    assistant = result.scalars().first()
+    
+    # Если в базе есть пресет (например, "@preset/agro-v1"), используем его.
+    # Если нет — используем запасную модель.
+    model_id = assistant.openrouter_preset if assistant and assistant.openrouter_preset else "openai/gpt-4o-mini"
+
+    # 3. Формируем историю сообщений
     messages = []
    
-    # Добавляем инструкцию по рекламе в System Prompt
-    messages.append({
-            "role": "system", 
-            "content": ad_system_prompt
-        })
+    # Добавляем инструкцию по рекламе как системное сообщение.
+    # OpenRouter сам объединит её с системным промптом, зашитым внутри пресета.
+    if ad_system_prompt:
+        messages.append({
+                "role": "system", 
+                "content": ad_system_prompt
+            })
     
     # Добавляем историю переписки
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     
-    # Добавляем текущее сообщение
+    # Добавляем текущее сообщение пользователя
     messages.append({"role": "user", "content": user_text})
 
-    # 3. Запрос к ИИ
+    # 4. Запрос к ИИ
     response = await ai_client.chat.completions.create(
-        model="openai/gpt-4o-mini", # Эта модель дешевая и умная, она поймет контекст
+        model=model_id, # <-- Сюда подставляется пресет (напр. @preset/agro-v1)
         messages=messages,
         temperature=0.7,
-        extra_headers={"HTTP-Referer": "https://telegram.org", "X-Title": "ElderlyApp"}
+        extra_headers={
+            "HTTP-Referer": "https://telegram.org", 
+            "X-Title": "Envisio"
+        }
     )
     
     return response.choices[0].message.content
