@@ -22,9 +22,11 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     keywords = Column(String) # "спина, боль, суставы"
+    target_assistants = Column(String, nullable=True) # "medic, fitness"
     ad_text = Column(Text)
     link = Column(String)
     is_active = Column(Boolean, default=True)
+    
 
 class Message(Base):
     __tablename__ = "messages"

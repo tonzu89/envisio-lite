@@ -9,24 +9,32 @@ ai_client = AsyncOpenAI(
 )
 
 async def get_products_context(assistant_slug: str, session) -> str:
-    """
-    Выгружает товары, доступные для конкретного ассистента,
-    и формирует из них инструкцию для ИИ.
-    """
-    # Забираем все активные товары (можно добавить фильтр по assistant_slug, если нужно)
+    # 1. Забираем ВСЕ активные товары
     result = await session.execute(select(Product).where(Product.is_active == True))
-    products = result.scalars().all()
+    all_products = result.scalars().all()
     
-    if not products:
+    if not all_products:
         return ""
 
-    # Формируем список для промпта
+    # 2. ФИЛЬТРАЦИЯ
+    allowed_products = []
+    for p in all_products:
+        # Если поле пустое — товар для всех
+        if not p.target_assistants:
+            allowed_products.append(p)
+        # Если поле заполнено, проверяем, есть ли там наш текущий assistant_slug
+        elif assistant_slug in p.target_assistants:
+            allowed_products.append(p)
+
+    if not allowed_products:
+        return ""
+
+    # 3. Формируем текст только из разрешенных товаров
     products_list = []
-    for p in products:
-        # Мы даем ИИ понять суть товара через его название и описание (ad_text)
+    for p in allowed_products:
         products_list.append(
-            f"- ТОВАР ID {p.id}: {p.name}. "
-            f"ОПИСАНИЕ/КОГДА ПРЕДЛАГАТЬ: {p.keywords} {p.ad_text}. "
+            f"- ТОВАР: {p.name}. "
+            f"КОНТЕКСТ: {p.keywords} {p.ad_text}. "
             f"ССЫЛКА: {p.link}"
         )
     
@@ -35,9 +43,8 @@ async def get_products_context(assistant_slug: str, session) -> str:
     return (
         f"\n[ИНСТРУКЦИЯ ПО РЕКЛАМЕ]\n"
         f"У тебя есть доступ к партнерским товарам:\n{products_str}\n"
-        f"ВАЖНОЕ ПРАВИЛО: Если (и только если) запрос пользователя по смыслу подходит под один из товаров, "
-        f"ты обязан нативно порекомендовать его в ответе. Не предлагай просто так. "
-        f"Если предлагаешь, обязательно дай ссылку."
+        f"ВАЖНО: Если контекст беседы подходит, порекомендуй товар нативно. "
+        f"Используй Markdown для ссылок: [Название](ссылка)."
     )
 
 async def get_ai_response(user_text: str, assistant_slug: str, history: list, session):

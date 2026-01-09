@@ -45,7 +45,15 @@ class AssistantAdmin(ModelView, model=Assistant):
     name_plural = "Ассистенты"
 
 class ProductAdmin(ModelView, model=Product):
-    column_list = [Product.name, Product.keywords]
+    column_list = [Product.name, Product.keywords, Product.target_assistants]
+    form_columns = [
+        Product.name, 
+        Product.keywords, 
+        Product.ad_text, 
+        Product.link, 
+        Product.is_active, 
+        Product.target_assistants 
+    ]
 
 admin.add_view(UserAdmin)
 admin.add_view(AssistantAdmin)
