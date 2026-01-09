@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,8 +11,17 @@ from app.security import validate_telegram_data
 from app.services import get_ai_response
 from pydantic import BaseModel
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Shutdown: Close engine connections
+    await engine.dispose()
+
 # 1. Создаем приложение
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # --- ADMIN PANEL ---
 # Инициализируем админку сразу после создания app
@@ -40,12 +50,6 @@ class ProductAdmin(ModelView, model=Product):
 admin.add_view(UserAdmin)
 admin.add_view(AssistantAdmin)
 admin.add_view(ProductAdmin)
-
-# --- EVENTS ---
-@app.on_event("startup")
-async def init_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 # --- API ---
 class ChatRequest(BaseModel):
