@@ -1,6 +1,7 @@
 from openai import AsyncOpenAI
 from app.config import settings
 from sqlalchemy.future import select
+from sqlalchemy import or_
 from app.models import Message, Product, Assistant
 
 ai_client = AsyncOpenAI(
@@ -8,9 +9,9 @@ ai_client = AsyncOpenAI(
     api_key=settings.OPENROUTER_API_KEY,
 )
 
-async def get_products_context(assistant_slug: str, session) -> str:
+async def get_products_context(assistant_slug: str, session, history: list, user_id: int = None) -> str:
     """
-    Формирует инструкцию с партнерскими товарами, 
+    Формирует инструкцию с партнерскими товарами,
     доступными для конкретного ассистента.
     """
     # 1. Забираем ВСЕ активные товары
@@ -33,6 +34,15 @@ async def get_products_context(assistant_slug: str, session) -> str:
     if not allowed_products:
         return ""
 
+    # 2.1 ПРОВЕРКА: Были ли уже рекомендации в последних 10 сообщениях?
+    # Проверяем переданную историю (она уже ограничена 10 сообщениями в main.py)
+    for msg in history:
+        if msg.role == "assistant":
+            for p in allowed_products:
+                if p.link in msg.content:
+                    # Если ссылка на товар уже была в истории, не добавляем рекламу снова
+                    return ""
+
     # 3. Формируем текст только из разрешенных товаров
     products_list = []
     for p in allowed_products:
@@ -47,13 +57,13 @@ async def get_products_context(assistant_slug: str, session) -> str:
     return (
         f"\n[ИНСТРУКЦИЯ ПО РЕКЛАМЕ]\n"
         f"У тебя есть доступ к партнерским товарам:\n{products_str}\n"
-        f"ВАЖНО: Если контекст беседы подходит, порекомендуй товар нативно. "
+        f"ВАЖНО: Если контекст последнего сообщения подходит, порекомендуй товар нативно. "
         f"Используй Markdown для ссылок: [Название](ссылка)."
     )
 
-async def get_ai_response(user_text: str, assistant_slug: str, history: list, session):
+async def get_ai_response(user_text: str, assistant_slug: str, history: list, session, user_id: int = None):
     # 1. Получаем контекст товаров (рекламная инструкция)
-    ad_system_prompt = await get_products_context(assistant_slug, session)
+    ad_system_prompt = await get_products_context(assistant_slug, session, history, user_id)
     
     # 2. Получаем данные ассистента, чтобы узнать его ПРЕСЕТ
     result = await session.execute(select(Assistant).where(Assistant.slug == assistant_slug))

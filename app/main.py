@@ -80,7 +80,7 @@ async def chat(
     # init_data = request.headers.get("X-Telegram-Init-Data")
     # Если тестируете локально без Телеграма, закомментируйте строку ниже:
     # user_data = validate_telegram_data(init_data) 
-    user_data = {"id": 12345, "username": "test_user"} # Раскомментируйте для теста в браузере
+    user_data = {"id": 12346, "username": "test_user2"} # Раскомментируйте для теста в браузере
     
     user_id = user_data["id"]
 
@@ -101,7 +101,7 @@ async def chat(
     history = history_q.scalars().all()[::-1]
 
     # 4. Ответ ИИ
-    ai_answer = await get_ai_response(req.text, req.assistant_slug, history, db)
+    ai_answer = await get_ai_response(req.text, req.assistant_slug, history, db, user_id=user_id)
 
     # 5. Сохранение
     msg_user = Message(user_id=user_id, assistant_slug=req.assistant_slug, role="user", content=req.text)
