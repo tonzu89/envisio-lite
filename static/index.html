@@ -68,14 +68,38 @@
             document.getElementById('chat-screen').classList.remove('flex');
             document.getElementById('lobby-screen').classList.remove('hidden');
         }
+// Показывает индикатор набора текста
+        function showTyping() {
+            // Если уже есть индикатор — не создаем новый
+            if (document.getElementById('typing-indicator')) return;
 
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            // Стили такие же, как у сообщения ассистента, но текст серый и курсив
+            div.className = 'bg-white border border-gray-200 self-start mr-12 rounded-t-2xl rounded-br-2xl rounded-bl-none p-4 shadow-sm text-gray-400 italic animate-pulse';
+            div.innerText = 'Печатает...';
+
+            const container = document.getElementById('messages');
+            container.appendChild(div);
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        // Удаляет индикатор
+        function hideTyping() {
+            const el = document.getElementById('typing-indicator');
+            if (el) el.remove();
+        }
         async function sendMessage() {
             const input = document.getElementById('msg-input');
-            const text = input.value;
+            const text = input.value.trim();
             if (!text) return;
 
+            // 1. Показываем сообщение юзера
             addMessage(text, 'user');
             input.value = '';
+
+            // 2. ВКЛЮЧАЕМ "ПЕЧАТАЕТ..."
+            showTyping();
 
             try {
                 const res = await fetch('/api/chat', {
@@ -86,16 +110,21 @@
                     },
                     body: JSON.stringify({ assistant_slug: currentAssistant.slug, text: text })
                 });
-                
+
+                // 3. ВЫКЛЮЧАЕМ "ПЕЧАТАЕТ..." (ответ пришел)
+                hideTyping();
+
                 if (res.status === 403) {
-                    alert("Ошибка безопасности! Запустите в Telegram.");
+                    addMessage("⚠️ Ошибка: Запустите через Telegram", 'ai');
                     return;
                 }
 
                 const data = await res.json();
                 addMessage(data.response, 'ai');
             } catch (e) {
-                alert("Ошибка сети");
+                // Если ошибка сети — тоже убираем индикатор
+                hideTyping();
+                addMessage("⚠️ Ошибка сети", 'ai');
             }
         }
 
