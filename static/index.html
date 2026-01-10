@@ -35,6 +35,14 @@
         tg.expand();
         let currentAssistant = null;
 
+        // --- ОБРАБОТЧИК ENTER ---
+        document.getElementById('msg-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Предотвращаем стандартное поведение (если нужно)
+                sendMessage();
+            }
+        });
+        
         // Загрузка ассистентов
         async function loadAssistants() {
             try {
@@ -68,7 +76,7 @@
             document.getElementById('chat-screen').classList.remove('flex');
             document.getElementById('lobby-screen').classList.remove('hidden');
         }
-// Показывает индикатор набора текста
+        // Показывает индикатор набора текста
         function showTyping() {
             // Если уже есть индикатор — не создаем новый
             if (document.getElementById('typing-indicator')) return;
