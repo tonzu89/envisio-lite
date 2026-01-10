@@ -69,6 +69,35 @@ async def get_assistants(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Assistant))
     return result.scalars().all()
 
+@app.get("/api/history")
+async def get_history(
+    assistant_slug: str,
+    limit: int = 20,
+    offset: int = 0,
+    request: Request = None,
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Валидация (Mock)
+    # init_data = request.headers.get("X-Telegram-Init-Data")
+    # user_data = validate_telegram_data(init_data)
+    user_data = {"id": 12346, "username": "test_user2"}
+    user_id = user_data["id"]
+
+    # 2. Загрузка истории
+    history_q = await db.execute(
+        select(Message)
+        .where(Message.user_id == user_id, Message.assistant_slug == assistant_slug)
+        .order_by(Message.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    history = history_q.scalars().all()
+    
+    return [
+        {"role": msg.role, "content": msg.content, "id": msg.id}
+        for msg in history
+    ]
+
 @app.post("/api/chat")
 async def chat(
     req: ChatRequest, 

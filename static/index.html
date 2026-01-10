@@ -34,6 +34,9 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
         let currentAssistant = null;
+        let currentOffset = 0;
+        let isLoadingHistory = false;
+        let allHistoryLoaded = false;
 
         // --- ОБРАБОТЧИК ENTER ---
         document.getElementById('msg-input').addEventListener('keypress', function (e) {
@@ -68,7 +71,70 @@
             document.getElementById('chat-screen').classList.remove('hidden');
             document.getElementById('chat-screen').classList.add('flex');
             document.getElementById('chat-title').innerText = ast.name;
-            document.getElementById('messages').innerHTML = ''; 
+            document.getElementById('messages').innerHTML = '';
+            
+            // Сброс состояния истории
+            currentOffset = 0;
+            allHistoryLoaded = false;
+            loadHistory();
+        }
+
+        // Бесконечный скролл (Lazy Loading)
+        document.getElementById('messages').addEventListener('scroll', function() {
+            if (this.scrollTop === 0 && !isLoadingHistory && !allHistoryLoaded) {
+                loadHistory();
+            }
+        });
+
+        async function loadHistory() {
+            if (isLoadingHistory || allHistoryLoaded) return;
+            isLoadingHistory = true;
+
+            const limit = 20;
+            try {
+                const res = await fetch(`/api/history?assistant_slug=${currentAssistant.slug}&offset=${currentOffset}&limit=${limit}`, {
+                     headers: {
+                        'X-Telegram-Init-Data': tg.initData
+                    }
+                });
+                const messages = await res.json();
+
+                if (messages.length < limit) {
+                    allHistoryLoaded = true;
+                }
+
+                if (messages.length > 0) {
+                    const container = document.getElementById('messages');
+                    const oldHeight = container.scrollHeight;
+
+                    if (currentOffset === 0) {
+                        // Первая загрузка: добавляем в хронологическом порядке (Старые -> Новые)
+                        // API отдает Новые -> Старые, поэтому реверсим
+                        messages.reverse().forEach(msg => {
+                            container.appendChild(createMessageElement(msg.content, msg.role));
+                        });
+                        // Скролл вниз
+                        container.scrollTo(0, container.scrollHeight);
+                    } else {
+                        // Подгрузка истории: добавляем вверх
+                        // API отдает Новые -> Старые (например 80, 79... 61)
+                        // Если делать prepend по очереди, то 80 встанет в начало, потом 79 перед ним...
+                        // В итоге будет 61...79, 80. Это верно.
+                        messages.forEach(msg => {
+                            container.prepend(createMessageElement(msg.content, msg.role));
+                        });
+                        
+                        // Восстанавливаем позицию скролла
+                        container.scrollTop = container.scrollHeight - oldHeight;
+                    }
+
+                    currentOffset += messages.length;
+                }
+            } catch (e) {
+                console.error("Error loading history", e);
+            } finally {
+                isLoadingHistory = false;
+            }
         }
 
         function goBack() {
@@ -136,16 +202,14 @@
             }
         }
 
-        function addMessage(text, role) {
+        function createMessageElement(text, role) {
             const div = document.createElement('div');
             
             // Базовые стили
-            let bubbleClass = role === 'user' 
-                ? 'bg-blue-100 self-end ml-auto' 
+            let bubbleClass = role === 'user'
+                ? 'bg-blue-100 self-end ml-auto'
                 : 'bg-white border self-start';
             
-            // prose (typography) делает текст красивым, а ссылки синими
-            // Но работает только если подключен плагин ?plugins=typography
             div.className = `${bubbleClass} p-3 rounded-lg max-w-[90%] text-lg prose prose-p:my-1 prose-a:text-blue-600 prose-a:underline break-words leading-snug`;
 
             // Парсим Markdown в HTML
@@ -156,7 +220,11 @@
             links.forEach(link => {
                 link.target = '_blank';
             });
+            return div;
+        }
 
+        function addMessage(text, role) {
+            const div = createMessageElement(text, role);
             document.getElementById('messages').appendChild(div);
             // Прокрутка вниз
             document.getElementById('messages').scrollTo(0, document.getElementById('messages').scrollHeight);
