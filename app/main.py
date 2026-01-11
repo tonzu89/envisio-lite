@@ -10,6 +10,7 @@ from app.models import User, Assistant, Message, Product
 from app.security import validate_telegram_data
 from app.services import get_ai_response
 from pydantic import BaseModel
+from markupsafe import Markup
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,9 +30,70 @@ admin = Admin(app, engine, base_url="/admin")
 
 class UserAdmin(ModelView, model=User):
     column_list = [User.tg_id, User.username]
+    can_view_details = True # Чтобы при нажатии на "глаз" (Просмотр) открывались детали
+    column_details_list = [User.tg_id, User.username, "all_messages"] # В деталях показываем ID, Имя и ссылку на сообщения
+    
+    column_labels = {
+        "all_messages": "История сообщений"
+    }
 
-# app/main.py
+    column_formatters = {
+        "all_messages": lambda m, a: Markup(
+            f'<a href="/admin/message/list?search={m.tg_id}">Открыть историю переписки</a>'
+        )
+    }
 
+    column_formatters_detail = {
+        "all_messages": lambda m, a: Markup(
+            f'<a href="/admin/message/list?search={m.tg_id}">Открыть историю переписки</a>'
+        )
+    }
+
+# Общий раздел "История переписки"
+class MessageAdmin(ModelView, model=Message):
+    name = "Сообщение"
+    name_plural = "История переписки"
+    icon = "fa-solid fa-comments"
+
+    # Какие колонки показывать в общей таблице
+    column_list = [
+        Message.id, 
+        Message.user_id, 
+        Message.assistant_slug, 
+        Message.role, 
+        Message.content
+    ]
+
+    # Включаем перенос текста (text-wrap) ---
+    column_formatters = {
+        Message.content: lambda m, a: Markup(
+            f'<div style="white-space: pre-wrap; min-width: 200px; max-width: 400px;">{m.content}</div>'
+        ) if m.content else ""
+    }
+
+    # Возможность искать по ID юзера или тексту
+    column_searchable_list = [
+        Message.user_id, 
+        Message.content, 
+        Message.assistant_slug
+    ]
+    
+    # Сортировка: новые сверху
+    column_default_sort = ("id", True)
+    
+    can_view_details = True
+    column_details_list = [
+        Message.id, 
+        Message.user_id, 
+        Message.assistant_slug, 
+        Message.role, 
+        Message.content,
+        Message.user
+    ]
+    can_create = False
+    can_edit = False
+    can_delete = True
+    
 class AssistantAdmin(ModelView, model=Assistant):
     column_list = [Assistant.slug, Assistant.name]
     
@@ -58,6 +120,7 @@ class ProductAdmin(ModelView, model=Product):
 admin.add_view(UserAdmin)
 admin.add_view(AssistantAdmin)
 admin.add_view(ProductAdmin)
+admin.add_view(MessageAdmin)
 
 # --- API ---
 class ChatRequest(BaseModel):

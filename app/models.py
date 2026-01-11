@@ -7,6 +7,7 @@ class User(Base):
     tg_id = Column(BigInteger, primary_key=True, index=True)
     username = Column(String, nullable=True)
     created_at = Column(String) # Упростим дату до строки для MVP
+    messages = relationship("Message", back_populates="user", lazy="select")
 
 class Assistant(Base):
     __tablename__ = "assistants"
@@ -35,3 +36,5 @@ class Message(Base):
     assistant_slug = Column(String, ForeignKey("assistants.slug"))
     role = Column(String) # user / assistant
     content = Column(Text)
+
+    user = relationship("User", back_populates="messages")
