@@ -2,13 +2,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqladmin import Admin, ModelView
+from sqladmin import Admin, ModelView, BaseView, expose
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import engine, Base, get_db
+from app.database import engine, Base, get_db, AsyncSessionLocal
 from app.models import User, Assistant, Message, Product
 from app.security import validate_telegram_data
 from app.services import get_ai_response
+from app.metrics import DashboardMetrics
 from pydantic import BaseModel
 from markupsafe import Markup
 
@@ -25,8 +26,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- ADMIN PANEL ---
+class DashboardAdmin(BaseView):
+    name = "Дашборд"
+    icon = "fa-solid fa-chart-line"
+
+    @expose("/dashboard", methods=["GET"])
+    async def report_page(self, request: Request):
+        async with AsyncSessionLocal() as session:
+            metrics_service = DashboardMetrics(session)
+            
+            metrics = {
+                "dau": await metrics_service.get_dau(),
+                "mau": await metrics_service.get_mau(),
+                "retention": await metrics_service.get_retention(),
+                "assistant_popularity": await metrics_service.get_assistant_popularity(),
+                "message_volume": await metrics_service.get_message_volume(),
+                "conversion_rate": await metrics_service.get_conversion_rate()
+            }
+
+        return await self.templates.TemplateResponse(request, "dashboard.html", context={"metrics": metrics})
+
 # Инициализируем админку сразу после создания app
-admin = Admin(app, engine, base_url="/admin")
+# index_view не поддерживается в конструкторе этой версии sqladmin, используем add_view
+admin = Admin(app, engine, base_url="/admin", templates_dir="app/templates")
 
 class UserAdmin(ModelView, model=User):
     column_list = [User.tg_id, User.username, User.created_at]
@@ -119,6 +141,7 @@ class ProductAdmin(ModelView, model=Product):
         Product.target_assistants 
     ]
 
+admin.add_view(DashboardAdmin) 
 admin.add_view(UserAdmin)
 admin.add_view(AssistantAdmin)
 admin.add_view(ProductAdmin)

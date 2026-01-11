@@ -1,0 +1,118 @@
+{% extends 'sqladmin/layout.html' %}
+
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Общая статистика проекта</h3>
+        </div>
+        <div class="card-body">
+            
+            <!-- 1. Активность (DAU/MAU) -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">DAU (24ч)</h4>
+                            <p class="display-4">{{ metrics.dau }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">MAU (30д)</h4>
+                            <p class="display-4">{{ metrics.mau }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Удержание и Конверсия -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h5>Удержание (Retention)</h5>
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Период</th>
+                                <th>% Пользователей</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1 день</td>
+                                <td>{{ metrics.retention['1_day'] }}%</td>
+                            </tr>
+                            <tr>
+                                <td>7 дней</td>
+                                <td>{{ metrics.retention['7_day'] }}%</td>
+                            </tr>
+                            <tr>
+                                <td>30 дней</td>
+                                <td>{{ metrics.retention['30_day'] }}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h5>Конверсия в диалог</h5>
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">Created -> Messaged</h4>
+                            <p class="display-4">{{ metrics.conversion_rate }}%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Популярность ассистентов -->
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <h5>Популярность Ассистентов (Сообщения)</h5>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Ассистент</th>
+                                <th>Кол-во сообщений</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in metrics.assistant_popularity %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Нагрузка -->
+            <div class="row">
+                <div class="col-md-12">
+                    <h5>Нагрузка (Сообщения за 7 дней)</h5>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Кол-во сообщений</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in metrics.message_volume %}
+                            <tr>
+                                <td>{{ item.date }}</td>
+                                <td>{{ item.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
