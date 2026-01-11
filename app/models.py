@@ -1,12 +1,16 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, BigInteger, ForeignKey, JSON
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import Column, Integer, String, Text, Boolean, BigInteger, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
+
+def get_current_time():
+    return datetime.now(timezone(timedelta(hours=3))).replace(microsecond=0)
 
 class User(Base):
     __tablename__ = "users"
     tg_id = Column(BigInteger, primary_key=True, index=True)
     username = Column(String, nullable=True)
-    created_at = Column(String) # Упростим дату до строки для MVP
+    created_at = Column(DateTime, default=get_current_time)  
     messages = relationship("Message", back_populates="user", lazy="select")
 
 class Assistant(Base):
@@ -36,5 +40,6 @@ class Message(Base):
     assistant_slug = Column(String, ForeignKey("assistants.slug"))
     role = Column(String) # user / assistant
     content = Column(Text)
+    created_at = Column(DateTime, default=get_current_time)
 
     user = relationship("User", back_populates="messages")

@@ -29,7 +29,7 @@ app = FastAPI(lifespan=lifespan)
 admin = Admin(app, engine, base_url="/admin")
 
 class UserAdmin(ModelView, model=User):
-    column_list = [User.tg_id, User.username]
+    column_list = [User.tg_id, User.username, User.created_at]
     can_view_details = True # Чтобы при нажатии на "глаз" (Просмотр) открывались детали
     column_details_list = [User.tg_id, User.username, "all_messages"] # В деталях показываем ID, Имя и ссылку на сообщения
     
@@ -59,6 +59,7 @@ class MessageAdmin(ModelView, model=Message):
     column_list = [
         Message.id, 
         Message.user_id, 
+        Message.created_at,
         Message.assistant_slug, 
         Message.role, 
         Message.content
@@ -85,6 +86,7 @@ class MessageAdmin(ModelView, model=Message):
     column_details_list = [
         Message.id, 
         Message.user_id, 
+        Message.created_at,
         Message.assistant_slug, 
         Message.role, 
         Message.content,
