@@ -13,6 +13,7 @@ class DashboardMetrics:
         result = await self.session.execute(
             select(func.count(func.distinct(Message.user_id)))
             .where(Message.created_at >= one_day_ago)
+            .where(Message.role == 'user')
         )
         return result.scalar() or 0
 
@@ -22,6 +23,7 @@ class DashboardMetrics:
         result = await self.session.execute(
             select(func.count(func.distinct(Message.user_id)))
             .where(Message.created_at >= thirty_days_ago)
+            .where(Message.role == 'user')
         )
         return result.scalar() or 0
 
@@ -65,6 +67,7 @@ class DashboardMetrics:
                 select(func.count(func.distinct(User.tg_id)))
                 .join(Message, Message.user_id == User.tg_id)
                 .where(User.created_at <= cutoff_date)
+                .where(Message.role == 'user')
                 .where(text(f"messages.created_at >= datetime(users.created_at, '+{days} days')"))
             )
             
@@ -79,6 +82,7 @@ class DashboardMetrics:
         """Distribution of messages by assistant_slug"""
         result = await self.session.execute(
             select(Message.assistant_slug, func.count(Message.id))
+            .where(Message.role == 'user')
             .group_by(Message.assistant_slug)
             .order_by(func.count(Message.id).desc())
         )
@@ -93,6 +97,7 @@ class DashboardMetrics:
         result = await self.session.execute(
             select(date_func, func.count(Message.id))
             .where(Message.created_at >= seven_days_ago)
+            .where(Message.role == 'user')
             .group_by(date_func)
             .order_by(date_func)
         )
@@ -111,6 +116,7 @@ class DashboardMetrics:
 
         active_users_res = await self.session.execute(
             select(func.count(func.distinct(Message.user_id)))
+            .where(Message.role == 'user')
         )
         active_users = active_users_res.scalar() or 0
 

@@ -6,7 +6,7 @@ from sqladmin import Admin, ModelView, BaseView, expose
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import engine, Base, get_db, AsyncSessionLocal
-from app.models import User, Assistant, Message, Product
+from app.models import User, Assistant, Message, Product, UserClick
 from app.security import validate_telegram_data
 from app.services import get_ai_response
 from app.metrics import DashboardMetrics
@@ -50,24 +50,38 @@ class DashboardAdmin(BaseView):
 admin = Admin(app, engine, base_url="/admin", templates_dir="app/templates")
 
 class UserAdmin(ModelView, model=User):
-    column_list = [User.tg_id, User.username, User.created_at]
-    can_view_details = True # Чтобы при нажатии на "глаз" (Просмотр) открывались детали
-    column_details_list = [User.tg_id, User.username, "all_messages"] # В деталях показываем ID, Имя и ссылку на сообщения
+    column_list = ["tg_id", "username", "created_at", "total_messages", "clicks_count"]
+    
+    column_sortable_list = ["tg_id", "username", "created_at"]
     
     column_labels = {
-        "all_messages": "История сообщений"
+        "tg_id": "Telegram ID",
+        "username": "Имя пользователя",
+        "created_at": "Дата регистрации",
+        "total_messages": "Всего сообщений",
+        "last_message_at": "Последнее сообщение",
+        "clicks_count": "Кликов по товарам",
+        "messages": "История сообщений",
+        "clicks": "История кликов"
     }
 
+    # В деталях (карточка) показываем всё
+    can_view_details = True
+    column_details_list = [
+        "tg_id", 
+        "username", 
+        "created_at", 
+        "total_messages",
+        "last_message_at",
+        "clicks_count",
+        "messages", 
+        "clicks"    
+    ]
+    
+    # Для красивого отображения даты
     column_formatters = {
-        "all_messages": lambda m, a: Markup(
-            f'<a href="/admin/message/list?search={m.tg_id}">Открыть историю переписки</a>'
-        )
-    }
-
-    column_formatters_detail = {
-        "all_messages": lambda m, a: Markup(
-            f'<a href="/admin/message/list?search={m.tg_id}">Открыть историю переписки</a>'
-        )
+        "created_at": lambda m, a: m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else "",
+        "last_message_at": lambda m, a: m.last_message_at.strftime("%Y-%m-%d %H:%M") if m.last_message_at else "Нет",
     }
 
 # Общий раздел "История переписки"
@@ -197,18 +211,26 @@ async def get_history(
     ]
 
 @app.get("/api/click")
-async def track_click(product_id: int, db: AsyncSession = Depends(get_db)):
+async def track_click(product_id: int, user_id: int = None, db: AsyncSession = Depends(get_db)):
     """
     Эндпоинт для трекинга кликов.
     1. Ищет товар по ID.
     2. Увеличивает счетчик кликов.
-    3. Редиректит пользователя на целевую ссылку.
+    3. Если передан user_id, сохраняет клик пользователя.
+    4. Редиректит пользователя на целевую ссылку.
     """
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # Общий счетчик
     product.clicks += 1
+    
+    # Персональный клик
+    if user_id:
+        click = UserClick(user_id=user_id, product_id=product_id)
+        db.add(click)
+        
     await db.commit()
     
     return RedirectResponse(url=product.link)

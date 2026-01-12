@@ -53,8 +53,10 @@ async def get_products_context(assistant_slug: str, session, history: list, user
     # 3. Формируем текст только из разрешенных товаров
     products_list = []
     for p in allowed_products:
-        # Генерируем ссылку для трекинга: /api/click?product_id=123
+        # Генерируем ссылку для трекинга: /api/click?product_id=123&user_id=456
         tracking_link = f"{REDIRECT_BASE_URL}?product_id={p.id}"
+        if user_id:
+            tracking_link += f"&user_id={user_id}"
         
         products_list.append(
             f"- ТОВАР: {p.name}. "

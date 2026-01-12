@@ -1,10 +1,24 @@
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, Integer, String, Text, Boolean, BigInteger, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, Boolean, BigInteger, ForeignKey, DateTime, select, func
+from sqlalchemy.orm import relationship, column_property
 from app.database import Base
 
 def get_current_time():
     return datetime.now(timezone(timedelta(hours=3))).replace(microsecond=0)
+
+class UserClick(Base):
+    """
+    Таблица для хранения кликов конкретных пользователей по товарам.
+    Позволяет считать конверсию по юзеру.
+    """
+    __tablename__ = "user_clicks"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.tg_id"))
+    product_id = Column(Integer, ForeignKey("products.id"))
+    created_at = Column(DateTime, default=get_current_time)
+    
+    user = relationship("User", back_populates="clicks")
+    product = relationship("Product")
 
 class User(Base):
     __tablename__ = "users"
@@ -12,6 +26,7 @@ class User(Base):
     username = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_current_time)  
     messages = relationship("Message", back_populates="user", lazy="select")
+    clicks = relationship("UserClick", back_populates="user", lazy="select")
 
 class Assistant(Base):
     __tablename__ = "assistants"
@@ -48,3 +63,27 @@ class Message(Base):
     created_at = Column(DateTime, default=get_current_time)
 
     user = relationship("User", back_populates="messages")
+
+# Calculated properties for User
+User.total_messages = column_property(
+    select(func.count(Message.id))
+    .where(Message.user_id == User.tg_id)
+    .where(Message.role == "user")
+    .correlate_except(Message)
+    .scalar_subquery()
+)
+
+User.last_message_at = column_property(
+    select(func.max(Message.created_at))
+    .where(Message.user_id == User.tg_id)
+    .where(Message.role == "user")
+    .correlate_except(Message)
+    .scalar_subquery()
+)
+
+User.clicks_count = column_property(
+    select(func.count(UserClick.id))
+    .where(UserClick.user_id == User.tg_id)
+    .correlate_except(UserClick)
+    .scalar_subquery()
+)
