@@ -12,6 +12,9 @@ from app.services import get_ai_response
 from app.metrics import DashboardMetrics
 from pydantic import BaseModel
 from markupsafe import Markup
+import gspread 
+from oauth2client.service_account import ServiceAccountCredentials 
+from starlette.responses import RedirectResponse 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -218,27 +221,100 @@ class AssistantAdmin(ModelView, model=Assistant):
     name = "Ассистент"
     name_plural = "Ассистенты"
 
-class ProductAdmin(ModelView, model=Product):
-    column_list = [Product.name, Product.keywords, Product.target_assistants, Product.impressions, Product.clicks, "ctr"]
+class ProductAdmin(ModelView, model=Product): 
+    name = "Товар" 
+    name_plural = "Товары" 
+    icon = "fa-solid fa-box" 
+    identity = "product"
+
+    # --- 1. ПОДКЛЮЧАЕМ НАШ ШАБЛОН --- 
+    list_template = "product_list.html" 
     
-    column_labels = {
-        "impressions": "Показы",
-        "clicks": "Клики",
-        "ctr": "CTR (%)"
-    }
+    column_list = [Product.name, Product.keywords, Product.target_assistants, Product.impressions, Product.clicks, "ctr"] 
     
-    form_columns = [
+    column_labels = { 
+        "impressions": "Показы", 
+        "clicks": "Клики", 
+        "ctr": "CTR (%)" 
+    } 
+    
+    form_columns = [ 
         Product.name, 
         Product.keywords, 
         Product.ad_text, 
         Product.link, 
         Product.is_active, 
         Product.target_assistants 
-    ]
+    ] 
     
-    column_formatters = {
-        "ctr": lambda m, a: f"{round((m.clicks / m.impressions * 100), 2) if m.impressions > 0 else 0}%"
-    }
+    column_formatters = { 
+        "ctr": lambda m, a: f"{round((m.clicks / m.impressions * 100), 2) if m.impressions > 0 else 0}%" 
+    } 
+ 
+    # --- 2. ЛОГИКА СИНХРОНИЗАЦИИ --- 
+    @expose("/sync_google", methods=["POST"]) 
+    async def sync_google(self, request: Request): 
+        try: 
+            # А. Подключение к Google 
+            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"] 
+            # Убедитесь, что файл google_creds.json лежит в корне (рядом с main.py и app.db) 
+            creds = ServiceAccountCredentials.from_json_keyfile_name("google_creds.json", scope) 
+            client = gspread.authorize(creds) 
+ 
+            # Б. Чтение таблицы 
+            # ЗАМЕНИТЕ НА ВАШУ ССЫЛКУ ИЛИ ID 
+            sheet_url = "https://docs.google.com/spreadsheets/d/1d4sBMQWBIPMn02EZPOrQnzo6JlfzEDDmP0lxCYO90G4" 
+            sheet = client.open_by_url(sheet_url).sheet1 
+             
+            # Получаем все записи. Ожидаем заголовки: name, keywords, ad_text, link, target_assistants 
+            records = sheet.get_all_records() 
+ 
+            async with AsyncSessionLocal() as session: 
+                count_added = 0 
+                count_updated = 0 
+                 
+                for row in records: 
+                    link = row.get('link') 
+                    if not link: 
+                         continue 
+                         
+                    # В. Проверяем: товар уже есть? (Ищем по ссылке) 
+                    # Используем select().where(...) 
+                    result = await session.execute(select(Product).where(Product.link == link)) 
+                    existing_product = result.scalars().first() 
+ 
+                    if existing_product: 
+                         # ОБНОВЛЯЕМ существующий 
+                         existing_product.name = row['name'] 
+                         existing_product.keywords = row['keywords'] 
+                         existing_product.ad_text = row['ad_text'] 
+                         existing_product.target_assistants = str(row['target_assistants']) # Приводим к строке 
+                         # existing_product.is_active = True # Можно раскомментировать, если надо "воскрешать" товары 
+                         count_updated += 1 
+                    else: 
+                         # СОЗДАЕМ новый 
+                         new_product = Product( 
+                             name=row['name'], 
+                             keywords=row['keywords'], 
+                             ad_text=row['ad_text'], 
+                             link=link, 
+                             target_assistants=str(row['target_assistants']), 
+                             is_active=True 
+                         ) 
+                         session.add(new_product) 
+                         count_added += 1 
+                 
+                await session.commit() 
+             
+            # Сообщение об успехе (можно вывести в лог или через flash-message, если настроено) 
+            print(f"Sync complete: {count_added} added, {count_updated} updated.") 
+ 
+        except Exception as e: 
+            # В идеале тут нужно вывести ошибку юзеру, но в MVP просто принтуем 
+            print(f"Google Sync Error: {e}") 
+ 
+        # Г. Возвращаемся обратно на список товаров 
+        return RedirectResponse(url=request.url_for("admin:list", identity="product"), status_code=303) 
 
 admin.add_view(DashboardAdmin) 
 admin.add_view(UserAdmin)
