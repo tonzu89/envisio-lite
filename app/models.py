@@ -25,8 +25,8 @@ class User(Base):
     tg_id = Column(BigInteger, primary_key=True, index=True)
     username = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_current_time)  
-    messages = relationship("Message", back_populates="user", lazy="select")
-    clicks = relationship("UserClick", back_populates="user", lazy="select")
+    messages = relationship("Message", back_populates="user", lazy="selectin")
+    clicks = relationship("UserClick", back_populates="user", lazy="selectin")
 
 class Assistant(Base):
     __tablename__ = "assistants"

@@ -49,40 +49,98 @@ class DashboardAdmin(BaseView):
 # index_view не поддерживается в конструкторе этой версии sqladmin, используем add_view
 admin = Admin(app, engine, base_url="/admin", templates_dir="app/templates")
 
-class UserAdmin(ModelView, model=User):
-    column_list = ["tg_id", "username", "created_at", "total_messages", "clicks_count"]
+class UserAdmin(ModelView, model=User): 
+    # 1. Список пользователей (Главная таблица) 
+    column_list = [ 
+        User.tg_id, 
+        User.username, 
+        User.created_at, 
+        "msg_count",   # Виртуальная колонка (счетчик) 
+        "clicks_count" # Виртуальная колонка (счетчик) 
+    ] 
+    
+    column_labels = { 
+        User.tg_id: "ID", 
+        User.username: "Юзернейм", 
+        User.created_at: "Регистрация", 
+        "msg_count": "Сообщений", 
+        "clicks_count": "Кликов", 
+        "history_link": "Переписка",   # Лейбл для ссылки 
+        "clicks_link": "Клики"         # Лейбл для ссылки 
+    } 
+ 
+    # 2. Детальный просмотр (Карточка юзера) 
+    can_view_details = True 
+    
+    column_details_list = [ 
+        User.tg_id, 
+        User.username, 
+        User.created_at, 
+        "msg_count", 
+        "clicks_count", 
+        "last_active", 
+        # --- ВМЕСТО СПИСКОВ ВСТАВЛЯЕМ НАШИ ВИРТУАЛЬНЫЕ ССЫЛКИ --- 
+        "history_link", 
+        "clicks_link" 
+    ] 
+ 
+    # --- ФОРМАТТЕРЫ (Логика отображения) --- 
+    
+    # Для счетчиков 
+    def _format_msg_count(model, context): 
+        # Фильтруем сообщения по роли 'user' для консистентности
+        return len([m for m in model.messages if m.role == 'user']) 
+         
+    def _format_clicks_count(model, context): 
+        # Проверка на случай, если clicks еще нет в модели 
+        return len(model.clicks) if hasattr(model, 'clicks') else 0 
+ 
+    def _format_last_active(model, context): 
+        # Фильтруем по 'user' роли
+        user_messages = [m for m in model.messages if m.role == 'user']
+        if not user_messages: 
+            return "-" 
+        last_msg = max(user_messages, key=lambda m: m.id) 
+        return last_msg.created_at.strftime("%Y-%m-%d %H:%M") 
+ 
+    # Для ССЫЛОК (Самое важное) 
+    def _format_history_link(model, context): 
+        count = len([m for m in model.messages if m.role == 'user']) 
+        # Формируем HTML ссылку. Класс btn делает её похожей на кнопку. 
+        # Ссылка ведет на /admin/message/list и ставит фильтр ?search=ID 
+        return Markup( 
+            f'<a href="/admin/message/list?search={model.tg_id}" ' 
+            f'class="btn btn-primary btn-sm">' 
+            f'📂 Открыть переписку ({count})</a>' 
+        ) 
+ 
+    def _format_clicks_link(model, context): 
+        count = len(model.clicks) if hasattr(model, 'clicks') else 0 
+        return Markup( 
+            f'<a href="/admin/user-click/list?search={model.tg_id}" ' 
+            f'class="btn btn-secondary btn-sm">' 
+            f'🖱️ Открыть клики ({count})</a>' 
+        ) 
+ 
+    # Подключаем форматтеры 
+    column_formatters = { 
+        "msg_count": _format_msg_count, 
+        "clicks_count": _format_clicks_count, 
+        "last_active": _format_last_active,
+        User.created_at: lambda m, a: m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else ""
+    } 
+    
+    # Для детального просмотра нужны те же форматтеры + ссылки 
+    column_formatters_detail = { 
+        "msg_count": _format_msg_count, 
+        "clicks_count": _format_clicks_count, 
+        "last_active": _format_last_active, 
+        "history_link": _format_history_link, # Подключаем ссылку 1 
+        "clicks_link": _format_clicks_link,    # Подключаем ссылку 2 
+        User.created_at: lambda m, a: m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else ""
+    } 
     
     column_sortable_list = ["tg_id", "username", "created_at"]
-    
-    column_labels = {
-        "tg_id": "Telegram ID",
-        "username": "Имя пользователя",
-        "created_at": "Дата регистрации",
-        "total_messages": "Всего сообщений",
-        "last_message_at": "Последнее сообщение",
-        "clicks_count": "Кликов по товарам",
-        "messages": "История сообщений",
-        "clicks": "История кликов"
-    }
-
-    # В деталях (карточка) показываем всё
-    can_view_details = True
-    column_details_list = [
-        "tg_id", 
-        "username", 
-        "created_at", 
-        "total_messages",
-        "last_message_at",
-        "clicks_count",
-        "messages", 
-        "clicks"    
-    ]
-    
-    # Для красивого отображения даты
-    column_formatters = {
-        "created_at": lambda m, a: m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else "",
-        "last_message_at": lambda m, a: m.last_message_at.strftime("%Y-%m-%d %H:%M") if m.last_message_at else "Нет",
-    }
 
 # Общий раздел "История переписки"
 class MessageAdmin(ModelView, model=Message):
@@ -131,6 +189,23 @@ class MessageAdmin(ModelView, model=Message):
     can_edit = False
     can_delete = True
     
+class UserClickAdmin(ModelView, model=UserClick): 
+    identity = "user-click"
+    name = "Клик" 
+    name_plural = "История кликов" 
+    icon = "fa-solid fa-hand-pointer" # Иконка пальца 
+    
+    column_list = [UserClick.id, UserClick.user_id, UserClick.product_id, UserClick.created_at] 
+    
+    # ВАЖНО: Добавляем user_id в поиск, чтобы фильтр ?search=123 работал 
+    column_searchable_list = [UserClick.user_id] 
+    
+    column_default_sort = ("created_at", True) # Свежие сверху 
+    
+    can_create = False 
+    can_edit = False 
+    can_delete = True 
+    
 class AssistantAdmin(ModelView, model=Assistant):
     column_list = [Assistant.slug, Assistant.name]
     
@@ -170,6 +245,7 @@ admin.add_view(UserAdmin)
 admin.add_view(AssistantAdmin)
 admin.add_view(ProductAdmin)
 admin.add_view(MessageAdmin)
+admin.add_view(UserClickAdmin)
 
 # --- API ---
 class ChatRequest(BaseModel):
