@@ -32,6 +32,11 @@ class Product(Base):
     link = Column(String)
     is_active = Column(Boolean, default=True)
     
+    # CTR metrics
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    
+
 
 class Message(Base):
     __tablename__ = "messages"

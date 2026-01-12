@@ -30,7 +30,7 @@
 
             <!-- 2. Удержание и Конверсия -->
             <div class="row mb-4">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <h5>Удержание (Retention)</h5>
                     <table class="table table-bordered">
                         <thead>
@@ -55,12 +55,25 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <h5>Конверсия в диалог</h5>
                     <div class="card bg-info text-white">
                         <div class="card-body text-center">
                             <h4 class="card-title">Created -> Messaged</h4>
                             <p class="display-4">{{ metrics.conversion_rate }}%</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h5>CTR Товаров (Click-Through Rate)</h5>
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h4 class="card-title">Средний CTR</h4>
+                            <p class="display-4">{{ metrics.ctr_stats.avg_ctr }}%</p>
+                            <p class="card-text">
+                                Показов: {{ metrics.ctr_stats.total_impressions }}<br>
+                                Кликов: {{ metrics.ctr_stats.total_clicks }}
+                            </p>
                         </div>
                     </div>
                 </div>

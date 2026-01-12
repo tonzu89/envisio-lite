@@ -1,7 +1,7 @@
 from sqlalchemy import select, func, text, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
-from app.models import User, Message, Assistant
+from app.models import User, Message, Assistant, Product
 
 class DashboardMetrics:
     def __init__(self, session: AsyncSession):
@@ -115,3 +115,30 @@ class DashboardMetrics:
         active_users = active_users_res.scalar() or 0
 
         return round((active_users / total_users) * 100, 2)
+
+    async def get_ctr_stats(self) -> dict:
+        """
+        Общая статистика по CTR товаров.
+        - Всего показов
+        - Всего кликов
+        - Средний CTR
+        """
+        result = await self.session.execute(
+            select(
+                func.sum(Product.impressions),
+                func.sum(Product.clicks)
+            )
+        )
+        row = result.first()
+        total_impressions = row[0] or 0
+        total_clicks = row[1] or 0
+        
+        avg_ctr = 0.0
+        if total_impressions > 0:
+            avg_ctr = round((total_clicks / total_impressions) * 100, 2)
+            
+        return {
+            "total_impressions": total_impressions,
+            "total_clicks": total_clicks,
+            "avg_ctr": avg_ctr
+        }

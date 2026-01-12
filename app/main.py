@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin, ModelView, BaseView, expose
 from sqlalchemy.future import select
@@ -41,7 +41,8 @@ class DashboardAdmin(BaseView):
                 "retention": await metrics_service.get_retention(),
                 "assistant_popularity": await metrics_service.get_assistant_popularity(),
                 "message_volume": await metrics_service.get_message_volume(),
-                "conversion_rate": await metrics_service.get_conversion_rate()
+                "conversion_rate": await metrics_service.get_conversion_rate(),
+                "ctr_stats": await metrics_service.get_ctr_stats()
             }
 
         return await self.templates.TemplateResponse(request, "dashboard.html", context={"metrics": metrics})
@@ -131,7 +132,14 @@ class AssistantAdmin(ModelView, model=Assistant):
     name_plural = "Ассистенты"
 
 class ProductAdmin(ModelView, model=Product):
-    column_list = [Product.name, Product.keywords, Product.target_assistants]
+    column_list = [Product.name, Product.keywords, Product.target_assistants, Product.impressions, Product.clicks, "ctr"]
+    
+    column_labels = {
+        "impressions": "Показы",
+        "clicks": "Клики",
+        "ctr": "CTR (%)"
+    }
+    
     form_columns = [
         Product.name, 
         Product.keywords, 
@@ -140,6 +148,10 @@ class ProductAdmin(ModelView, model=Product):
         Product.is_active, 
         Product.target_assistants 
     ]
+    
+    column_formatters = {
+        "ctr": lambda m, a: f"{round((m.clicks / m.impressions * 100), 2) if m.impressions > 0 else 0}%"
+    }
 
 admin.add_view(DashboardAdmin) 
 admin.add_view(UserAdmin)
@@ -185,6 +197,23 @@ async def get_history(
         {"role": msg.role, "content": msg.content, "id": msg.id}
         for msg in history
     ]
+
+@app.get("/api/click")
+async def track_click(product_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Эндпоинт для трекинга кликов.
+    1. Ищет товар по ID.
+    2. Увеличивает счетчик кликов.
+    3. Редиректит пользователя на целевую ссылку.
+    """
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    product.clicks += 1
+    await db.commit()
+    
+    return RedirectResponse(url=product.link)
 
 @app.post("/api/chat")
 async def chat(
