@@ -1,6 +1,6 @@
 # --- 1. Секреты и настройки (Самое важное) ---
 .env
-config.py  # Если храните настройки тут, лучше исключить
+config.py  
 google_creds.json
 *.json  
 
@@ -29,6 +29,6 @@ Thumbs.db    # Мусор от Windows
 
 # --- 6. Логи и базы данных ---
 *.log
-*.sqlite3    # Если используете встроенную БД SQLite
+*.db
 
 static\uploads

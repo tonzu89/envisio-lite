@@ -11,12 +11,12 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 ai_client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
+    base_url=settings.OPENROUTER_BASE_URL,
     api_key=settings.OPENROUTER_API_KEY,
 )
 
-# Базовый URL для редиректов (должен быть настроен в config, но для простоты захардкодим или возьмем локальный)
-REDIRECT_BASE_URL = "http://localhost:8000/api/click"
+# Базовый URL для редиректов
+REDIRECT_BASE_URL = f"{settings.REDIRECT_BASE_URL}/api/click"
 
 async def get_products_context(assistant_slug: str, session, history: list, user_id: int = None) -> tuple[str, list[Product]]:
     """

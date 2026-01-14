@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin, ModelView, BaseView, expose
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.config import settings
 from app.database import engine, Base, get_db, AsyncSessionLocal
 from app.models import User, Assistant, Message, Product, UserClick
 from app.security import validate_telegram_data
@@ -267,14 +268,14 @@ class ProductAdmin(ModelView, model=Product):
     async def sync_google(self, request: Request): 
         try: 
             # А. Подключение к Google 
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"] 
+            scope = settings.GOOGLE_SCOPES
             # Убедитесь, что файл google_creds.json лежит в корне (рядом с main.py и app.db) 
-            creds = ServiceAccountCredentials.from_json_keyfile_name("google_creds.json", scope) 
+            creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDS_FILE, scope) 
             client = gspread.authorize(creds) 
  
             # Б. Чтение таблицы 
             # ЗАМЕНИТЕ НА ВАШУ ССЫЛКУ ИЛИ ID 
-            sheet_url = "https://docs.google.com/spreadsheets/d/1d4sBMQWBIPMn02EZPOrQnzo6JlfzEDDmP0lxCYO90G4" 
+            sheet_url = settings.GOOGLE_SHEET_URL 
             sheet = client.open_by_url(sheet_url).sheet1 
              
             # Получаем все записи. Ожидаем заголовки: name, keywords, ad_text, link, target_assistants 
@@ -425,9 +426,9 @@ async def chat(
     # 2.1 Обработка файла
     saved_image_path = None
     if file:
-        os.makedirs("static/uploads", exist_ok=True)
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         filename = f"{uuid.uuid4()}.jpg" # Всегда сохраняем в JPG (экономит место)
-        saved_image_path = f"static/uploads/{filename}"
+        saved_image_path = f"{settings.UPLOAD_DIR}/{filename}"
         
         # --- ОПТИМИЗАЦИЯ ---
         # 1. Читаем файл в память
@@ -446,13 +447,13 @@ async def chat(
         image.save(saved_image_path, "JPEG", quality=70, optimize=True)
 
     # 3. Загрузка истории
-    history_q = await db.execute(
+    history_result = await db.execute(
         select(Message)
         .where(Message.user_id == user_id, Message.assistant_slug == assistant_slug)
         .order_by(Message.id.desc())
-        .limit(10)
+        .limit(settings.CHAT_HISTORY_LIMIT)
     )
-    history = history_q.scalars().all()[::-1]
+    history = history_result.scalars().all()[::-1]
 
     # 4. Ответ ИИ
     ai_answer = await get_ai_response(text, assistant_slug, history, db, user_id=user_id, image_path=saved_image_path)
