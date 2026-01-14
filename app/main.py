@@ -12,8 +12,9 @@ from app.services import get_ai_response
 from app.metrics import DashboardMetrics
 from pydantic import BaseModel
 from markupsafe import Markup
+from PIL import Image
+import io
 import gspread 
-import shutil
 import os
 import uuid
 from oauth2client.service_account import ServiceAccountCredentials 
@@ -425,11 +426,24 @@ async def chat(
     saved_image_path = None
     if file:
         os.makedirs("static/uploads", exist_ok=True)
-        extension = file.filename.split(".")[-1]
-        filename = f"{uuid.uuid4()}.{extension}"
+        filename = f"{uuid.uuid4()}.jpg" # Всегда сохраняем в JPG (экономит место)
         saved_image_path = f"static/uploads/{filename}"
-        with open(saved_image_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        
+        # --- ОПТИМИЗАЦИЯ ---
+        # 1. Читаем файл в память
+        content = await file.read()
+        image = Image.open(io.BytesIO(content))
+        
+        # 2. Конвертируем в RGB (если был PNG с прозрачностью, иначе упадет)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+            
+        # 3. Ресайз (если больше 1024px по широкой стороне)
+        max_size = (1024, 1024)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # 4. Сохраняем с качеством 70% (визуально не видно, вес падает в 5-10 раз)
+        image.save(saved_image_path, "JPEG", quality=70, optimize=True)
 
     # 3. Загрузка истории
     history_q = await db.execute(

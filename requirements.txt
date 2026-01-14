@@ -3,8 +3,10 @@ uvicorn
 sqlalchemy
 aiosqlite
 asyncpg
+pydantic
 pydantic-settings
 sqladmin
+jinja2
 python-multipart
 httpx
 openai
@@ -12,3 +14,6 @@ python-dotenv
 itsdangerous
 gspread
 oauth2client
+Pillow
+alembic
+markupsafe
