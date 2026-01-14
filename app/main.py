@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Depends, Request, HTTPException, Form, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin, ModelView, BaseView, expose
@@ -13,6 +13,9 @@ from app.metrics import DashboardMetrics
 from pydantic import BaseModel
 from markupsafe import Markup
 import gspread 
+import shutil
+import os
+import uuid
 from oauth2client.service_account import ServiceAccountCredentials 
 from starlette.responses import RedirectResponse 
 
@@ -158,14 +161,21 @@ class MessageAdmin(ModelView, model=Message):
         Message.created_at,
         Message.assistant_slug, 
         Message.role, 
-        Message.content
+        Message.content,
+        "image_preview"
     ]
+
+    def _format_image(model, context):
+        if model.image_path:
+            return Markup(f'<img src="/{model.image_path}" width="50" height="50" style="object-fit: cover; border-radius: 4px;">')
+        return ""
 
     # Включаем перенос текста (text-wrap) ---
     column_formatters = {
         Message.content: lambda m, a: Markup(
             f'<div style="white-space: pre-wrap; min-width: 200px; max-width: 400px;">{m.content}</div>'
-        ) if m.content else ""
+        ) if m.content else "",
+        "image_preview": _format_image
     }
 
     # Возможность искать по ID юзера или тексту
@@ -358,7 +368,7 @@ async def get_history(
     history = history_q.scalars().all()
     
     return [
-        {"role": msg.role, "content": msg.content, "id": msg.id}
+        {"role": msg.role, "content": msg.content, "id": msg.id, "image_path": msg.image_path}
         for msg in history
     ]
 
@@ -389,8 +399,10 @@ async def track_click(product_id: int, user_id: int = None, db: AsyncSession = D
 
 @app.post("/api/chat")
 async def chat(
-    req: ChatRequest, 
     request: Request, 
+    assistant_slug: str = Form(...),
+    text: str = Form(...),
+    file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db)
 ):
     # Мут валидации для тестов
@@ -409,21 +421,37 @@ async def chat(
         db.add(user)
         await db.commit()
 
+    # 2.1 Обработка файла
+    saved_image_path = None
+    if file:
+        os.makedirs("static/uploads", exist_ok=True)
+        extension = file.filename.split(".")[-1]
+        filename = f"{uuid.uuid4()}.{extension}"
+        saved_image_path = f"static/uploads/{filename}"
+        with open(saved_image_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
     # 3. Загрузка истории
     history_q = await db.execute(
         select(Message)
-        .where(Message.user_id == user_id, Message.assistant_slug == req.assistant_slug)
+        .where(Message.user_id == user_id, Message.assistant_slug == assistant_slug)
         .order_by(Message.id.desc())
         .limit(10)
     )
     history = history_q.scalars().all()[::-1]
 
     # 4. Ответ ИИ
-    ai_answer = await get_ai_response(req.text, req.assistant_slug, history, db, user_id=user_id)
+    ai_answer = await get_ai_response(text, assistant_slug, history, db, user_id=user_id, image_path=saved_image_path)
 
     # 5. Сохранение
-    msg_user = Message(user_id=user_id, assistant_slug=req.assistant_slug, role="user", content=req.text)
-    msg_ai = Message(user_id=user_id, assistant_slug=req.assistant_slug, role="assistant", content=ai_answer)
+    msg_user = Message(
+        user_id=user_id, 
+        assistant_slug=assistant_slug, 
+        role="user", 
+        content=text,
+        image_path=saved_image_path
+    )
+    msg_ai = Message(user_id=user_id, assistant_slug=assistant_slug, role="assistant", content=ai_answer)
     db.add_all([msg_user, msg_ai])
     await db.commit()
 

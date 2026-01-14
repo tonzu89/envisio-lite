@@ -60,6 +60,7 @@ class Message(Base):
     assistant_slug = Column(String, ForeignKey("assistants.slug"))
     role = Column(String) # user / assistant
     content = Column(Text)
+    image_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_current_time)
 
     user = relationship("User", back_populates="messages")

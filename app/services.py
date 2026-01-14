@@ -4,6 +4,11 @@ from sqlalchemy.future import select
 from sqlalchemy import or_
 from app.models import Message, Product, Assistant
 import re
+import base64
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
 
 ai_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -76,7 +81,7 @@ async def get_products_context(assistant_slug: str, session, history: list, user
     
     return prompt, allowed_products
 
-async def get_ai_response(user_text: str, assistant_slug: str, history: list, session, user_id: int = None):
+async def get_ai_response(user_text: str, assistant_slug: str, history: list, session, user_id: int = None, image_path: str = None):
     # 1. Получаем контекст товаров (рекламная инструкция)
     ad_system_prompt, allowed_products = await get_products_context(assistant_slug, session, history, user_id)
     
@@ -86,7 +91,10 @@ async def get_ai_response(user_text: str, assistant_slug: str, history: list, se
     
     # Если в базе есть пресет (например, "@preset/agro-v1"), используем его.
     # Если нет — используем запасную модель.
-    model_id = assistant.openrouter_preset if assistant and assistant.openrouter_preset else "openai/gpt-4o-mini"
+    # ВАЖНО: Если есть картинка, модель ДОЛЖНА поддерживать Vision. 
+    # Если в пресете прописана модель без Vision, запрос упадет.
+    # Для надежности: если есть картинка и нет пресета, берем gpt-4o.
+    model_id = assistant.openrouter_preset if assistant and assistant.openrouter_preset else ("openai/gpt-4o" if image_path else "openai/gpt-4o-mini")
 
     # 3. Формируем историю сообщений
     messages = []
@@ -104,7 +112,20 @@ async def get_ai_response(user_text: str, assistant_slug: str, history: list, se
         messages.append({"role": msg.role, "content": msg.content})
     
     # Добавляем текущее сообщение пользователя
-    messages.append({"role": "user", "content": user_text})
+    if image_path:
+        base64_image = encode_image(image_path)
+        user_content = [
+            {"type": "text", "text": user_text},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            }
+        ]
+        messages.append({"role": "user", "content": user_content})
+    else:
+        messages.append({"role": "user", "content": user_text})
 
     # 4. Запрос к ИИ
     response = await ai_client.chat.completions.create(
