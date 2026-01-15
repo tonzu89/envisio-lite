@@ -407,6 +407,12 @@ class ChatRequest(BaseModel):
 async def get_assistants(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Assistant).where(Assistant.is_active == True))
     return result.scalars().all()
+
+@app.get("/api/is_admin")
+async def is_admin(user_id: int):
+    admin_ids = [int(i.strip()) for i in settings.ADMIN_IDS.split(",") if i.strip()]
+    return {"is_admin": user_id in admin_ids}
+
 @app.get("/api/history")
 async def get_history(
     assistant_slug: str,

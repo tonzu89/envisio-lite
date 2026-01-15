@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Paths
     UPLOAD_DIR: str = "static/uploads"
     
+    # Admins
+    ADMIN_IDS: str = "12346,254913192"
+
     class Config:
         env_file = ".env"
 
