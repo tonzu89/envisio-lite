@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     # Google Sheets
     GOOGLE_SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1d4sBMQWBIPMn02EZPOrQnzo6JlfzEDDmP0lxCYO90G4"
     GOOGLE_CREDS_FILE: str = "google_creds.json"
+    GOOGLE_SHEET_ASSISTANTS_TAB: str = "assistants"
+    GOOGLE_SHEET_PRODUCTS_TAB: str = "products"
     GOOGLE_SCOPES: list[str] = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     # API & Redirects

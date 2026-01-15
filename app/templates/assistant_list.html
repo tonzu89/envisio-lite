@@ -1,0 +1,20 @@
+{% extends "sqladmin/list.html" %} 
+ 
+ {% block content %} 
+     {# Вставляем нашу панель ПЕРЕД таблицей #} 
+     <div class="d-flex justify-content-between align-items-center mb-4"> 
+         
+         {# Сохраняем заголовок (или оставляем пустым, если он в breadcrumbs) #} 
+         <div></div> 
+ 
+         {# Наша кнопка Синхронизации #} 
+         <form action="{{ url_for('admin:view-assistant-sync_google') }}" method="post" onsubmit="return confirm('Вы уверены? Это обновит ассистентов из Google Таблицы.');"> 
+             <button type="submit" class="btn btn-success"> 
+                 <i class="fa-brands fa-google-drive"></i> Синхронизировать с Google
+             </button> 
+         </form> 
+     </div> 
+ 
+     {# Выводим стандартный контент (таблицу) #} 
+     {{ super() }} 
+ {% endblock %}

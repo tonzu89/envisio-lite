@@ -36,6 +36,7 @@ class Assistant(Base):
     icon_emoji = Column(String)
     openrouter_preset = Column(String) # "@preset/..."
     welcome_message = Column(Text)
+    is_active = Column(Boolean, default=True)
 
 class Product(Base):
     __tablename__ = "products"

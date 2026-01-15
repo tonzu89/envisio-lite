@@ -222,16 +222,79 @@ class UserClickAdmin(ModelView, model=UserClick):
     can_delete = True 
     
 class AssistantAdmin(ModelView, model=Assistant):
-    column_list = [Assistant.slug, Assistant.name]
+    identity = "assistant"
+    name = "Ассистент"
+    name_plural = "Ассистенты"
+    icon = "fa-solid fa-robot"
     
+    list_template = "assistant_list.html"
+    
+    column_list = [Assistant.slug, Assistant.name, Assistant.icon_emoji, Assistant.is_active]
     
     form_include_pk = True 
     
+    form_columns = [Assistant.slug, Assistant.name, Assistant.description, Assistant.icon_emoji, Assistant.welcome_message, Assistant.openrouter_preset, Assistant.is_active]
     
-    form_columns = [Assistant.slug, Assistant.name, Assistant.description, Assistant.icon_emoji, Assistant.welcome_message, Assistant.openrouter_preset]
-    
-    name = "Ассистент"
-    name_plural = "Ассистенты"
+    # --- ЛОГИКА СИНХРОНИЗАЦИИ --- 
+    @expose("/sync_google", methods=["POST"]) 
+    async def sync_google(self, request: Request): 
+        try: 
+            # А. Подключение к Google 
+            scope = settings.GOOGLE_SCOPES
+            creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDS_FILE, scope) 
+            client = gspread.authorize(creds) 
+ 
+            # Б. Чтение таблицы 
+            sheet_url = settings.GOOGLE_SHEET_URL 
+            sheet = client.open_by_url(sheet_url).worksheet(settings.GOOGLE_SHEET_ASSISTANTS_TAB)
+             
+            # Ожидаем заголовки: slug, name, description, icon_emoji, welcome_message, openrouter_preset
+            records = sheet.get_all_records() 
+ 
+            async with AsyncSessionLocal() as session: 
+                count_added = 0 
+                count_updated = 0 
+                 
+                for row in records: 
+                    slug = row.get('slug') 
+                    if not slug: 
+                         continue 
+                         
+                    # В. Проверяем: ассистент уже есть? (Ищем по slug) 
+                    result = await session.execute(select(Assistant).where(Assistant.slug == slug)) 
+                    existing_ast = result.scalars().first() 
+ 
+                    if existing_ast: 
+                         # ОБНОВЛЯЕМ существующий 
+                         existing_ast.name = row['name'] 
+                         existing_ast.description = row['description'] 
+                         existing_ast.icon_emoji = row['icon_emoji'] 
+                         existing_ast.welcome_message = row['welcome_message'] 
+                         existing_ast.openrouter_preset = row['openrouter_preset']
+                         existing_ast.is_active = str(row.get('is_active', 'True')).lower() == 'true'
+                         count_updated += 1 
+                    else: 
+                         # СОЗДАЕМ нового 
+                         new_ast = Assistant( 
+                             slug=slug,
+                             name=row['name'], 
+                             description=row['description'], 
+                             icon_emoji=row['icon_emoji'], 
+                             welcome_message=row['welcome_message'], 
+                             openrouter_preset=row['openrouter_preset'],
+                             is_active=str(row.get('is_active', 'True')).lower() == 'true'
+                         ) 
+                         session.add(new_ast) 
+                         count_added += 1 
+                 
+                await session.commit() 
+             
+            print(f"Assistant Sync complete: {count_added} added, {count_updated} updated.") 
+ 
+        except Exception as e: 
+            print(f"Assistant Google Sync Error: {e}") 
+ 
+        return RedirectResponse(url=request.url_for("admin:list", identity="assistant"), status_code=303) 
 
 class ProductAdmin(ModelView, model=Product): 
     name = "Товар" 
@@ -276,7 +339,7 @@ class ProductAdmin(ModelView, model=Product):
             # Б. Чтение таблицы 
             # ЗАМЕНИТЕ НА ВАШУ ССЫЛКУ ИЛИ ID 
             sheet_url = settings.GOOGLE_SHEET_URL 
-            sheet = client.open_by_url(sheet_url).sheet1 
+            sheet = client.open_by_url(sheet_url).worksheet(settings.GOOGLE_SHEET_PRODUCTS_TAB)
              
             # Получаем все записи. Ожидаем заголовки: name, keywords, ad_text, link, target_assistants 
             records = sheet.get_all_records() 
@@ -342,9 +405,8 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/assistants")
 async def get_assistants(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Assistant))
+    result = await db.execute(select(Assistant).where(Assistant.is_active == True))
     return result.scalars().all()
-
 @app.get("/api/history")
 async def get_history(
     assistant_slug: str,
