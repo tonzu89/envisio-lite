@@ -74,8 +74,8 @@
         // Загрузка ассистентов
         async function loadAssistants() {
             try {
-                // Проверка админа
-                const userId = tg.initDataUnsafe?.user?.id;
+                // Проверка админа (для локальных тестов используем 12346, если нет ID от TG)
+                const userId = tg.initDataUnsafe?.user?.id || 12346;
                 if (userId) {
                     const adminRes = await fetch(`/api/is_admin?user_id=${userId}`);
                     const adminData = await adminRes.json();
@@ -161,6 +161,10 @@
                     }
 
                     currentOffset += messages.length;
+                } else if (currentOffset === 0 && currentAssistant.welcome_message) {
+                    // Если истории нет (первый запуск), показываем приветственное сообщение
+                    const container = document.getElementById('messages');
+                    container.appendChild(createMessageElement(currentAssistant.welcome_message, 'ai'));
                 }
             } catch (e) {
                 console.error("Error loading history", e);
