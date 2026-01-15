@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     
     # Admins
     ADMIN_IDS: str = "12346,254913192"
+    ADMIN_PASSWORD: str = "admin123"
+    SECRET_KEY: str = "super-secret-key-change-me-in-production"
 
     class Config:
         env_file = ".env"

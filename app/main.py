@@ -3,6 +3,8 @@ from fastapi import FastAPI, Depends, Request, HTTPException, Form, UploadFile, 
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin, ModelView, BaseView, expose
+from sqladmin.authentication import AuthenticationBackend
+from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
@@ -30,6 +32,32 @@ async def lifespan(app: FastAPI):
 
 # 1. Создаем приложение
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+# --- ADMIN PANEL AUTH ---
+class AdminAuth(AuthenticationBackend):
+    async def login(self, request: Request) -> bool:
+        form = await request.form()
+        username = form.get("username")
+        password = form.get("password")
+
+        # Простая проверка: имя пользователя любое (или 'admin'), пароль из настроек
+        if password == settings.ADMIN_PASSWORD:
+            request.session.update({"token": "authenticated"})
+            return True
+        return False
+
+    async def logout(self, request: Request) -> bool:
+        request.session.clear()
+        return True
+
+    async def authenticate(self, request: Request) -> bool:
+        token = request.session.get("token")
+        if not token:
+            return False
+        return True
+
+authentication_backend = AdminAuth(secret_key=settings.SECRET_KEY)
 
 # --- ADMIN PANEL ---
 class DashboardAdmin(BaseView):
@@ -55,7 +83,13 @@ class DashboardAdmin(BaseView):
 
 # Инициализируем админку сразу после создания app
 # index_view не поддерживается в конструкторе этой версии sqladmin, используем add_view
-admin = Admin(app, engine, base_url="/admin", templates_dir="app/templates")
+admin = Admin(
+    app, 
+    engine, 
+    base_url="/admin", 
+    templates_dir="app/templates",
+    authentication_backend=authentication_backend
+)
 
 class UserAdmin(ModelView, model=User): 
     # 1. Список пользователей (Главная таблица) 
