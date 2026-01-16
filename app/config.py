@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = "admin123"
     SECRET_KEY: str = "super-secret-key-change-me-in-production"
 
+    # Salebot
+    SALEBOT_API_KEY: str = ""
+    SALEBOT_TARGET_BLOCK_ID: str = "12345678"
+
     class Config:
         env_file = ".env"
 

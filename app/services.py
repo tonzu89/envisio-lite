@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from app.models import Message, Product, Assistant
 import re
 import base64
+import httpx
 
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
@@ -164,3 +165,48 @@ async def get_ai_response(user_text: str, assistant_slug: str, history: list, se
             # Commit будет сделан вызывающим кодом (в main.py) вместе с сохранением сообщения
             
     return ai_content
+
+async def fetch_salebot_id(tg_id: int) -> str | None: 
+    """ 
+    Запрашивает у Salebot внутренний ID клиента по его Telegram ID. 
+    """ 
+    if not settings.SALEBOT_API_KEY: 
+        return None 
+ 
+    url = f"https://chatter.salebot.pro/api/{settings.SALEBOT_API_KEY}/load_clients" 
+     
+    async with httpx.AsyncClient() as client: 
+        try: 
+            response = await client.post(url, json=[{ 
+                "platform_id": str(tg_id), 
+                "client_type": 0 # 0 - стандартный тип для мессенджеров 
+            }]) 
+             
+            if response.status_code == 200: 
+                data = response.json() 
+                # Salebot возвращает список, берем первого клиента 
+                if "clients" in data and len(data["clients"]) > 0: 
+                    return str(data["clients"][0]["id"]) 
+        except Exception as e: 
+            print(f"Error fetching salebot_id: {e}") 
+             
+    return None 
+ 
+ 
+async def move_client_to_block(salebot_client_id: str, block_id: str): 
+    """ 
+    Фоновая задача: перекидывает клиента в нужный блок конструктора. 
+    """ 
+    if not settings.SALEBOT_API_KEY or not salebot_client_id: 
+        return 
+ 
+    url = f"https://chatter.salebot.pro/api/{settings.SALEBOT_API_KEY}/callback" 
+     
+    async with httpx.AsyncClient() as client: 
+        try: 
+            await client.post(url, json={ 
+                "client_id": salebot_client_id, 
+                "message_id": block_id 
+            }) 
+        except Exception as e: 
+            print(f"Error calling Salebot callback: {e}")

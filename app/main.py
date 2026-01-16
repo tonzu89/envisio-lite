@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request, HTTPException, Form, UploadFile, File
+from fastapi import FastAPI, Depends, Request, HTTPException, Form, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin, ModelView, BaseView, expose
@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import engine, Base, get_db, AsyncSessionLocal
 from app.models import User, Assistant, Message, Product, UserClick
 from app.security import validate_telegram_data
-from app.services import get_ai_response
+from app.services import get_ai_response, fetch_salebot_id, move_client_to_block
 from app.metrics import DashboardMetrics
 from pydantic import BaseModel
 from markupsafe import Markup
@@ -504,6 +504,7 @@ async def track_click(product_id: int, user_id: int = None, db: AsyncSession = D
 @app.post("/api/chat")
 async def chat(
     request: Request, 
+    background_tasks: BackgroundTasks,
     assistant_slug: str = Form(...),
     text: str = Form(...),
     file: UploadFile = File(None),
@@ -524,6 +525,23 @@ async def chat(
         user = User(tg_id=user_id, username=user_data.get("username", "Anon"))
         db.add(user)
         await db.commit()
+
+    # ================= ЛОГИКА SALEBOT ================= 
+    # А. Проверяем, знаем ли мы уже ID клиента? 
+    current_salebot_id = user.salebot_id 
+    
+    # Б. Если не знаем — спрашиваем у Salebot и сохраняем 
+    if not current_salebot_id: 
+        found_id = await fetch_salebot_id(user_id) # user_id это tg_id 
+        if found_id: 
+            user.salebot_id = found_id 
+            current_salebot_id = found_id 
+            await db.commit() # Сохраняем в БД навсегда 
+ 
+    # В. Если ID есть — ставим задачу в очередь (выполнится после ответа пользователю) 
+    if current_salebot_id: 
+        background_tasks.add_task(move_client_to_block, current_salebot_id, settings.SALEBOT_TARGET_BLOCK_ID) 
+    # ================================================== 
 
     # 2.1 Обработка файла
     saved_image_path = None

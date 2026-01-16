@@ -24,6 +24,7 @@ class User(Base):
     __tablename__ = "users"
     tg_id = Column(BigInteger, primary_key=True, index=True)
     username = Column(String, nullable=True)
+    salebot_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_current_time)  
     messages = relationship("Message", back_populates="user", lazy="selectin")
     clicks = relationship("UserClick", back_populates="user", lazy="selectin")
